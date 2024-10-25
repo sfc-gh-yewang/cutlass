@@ -871,7 +871,8 @@ auto
 make_tma_copy_desc(Tensor<GEngine,GLayout> const& gtensor,         // The original GMEM Tensor
                    Layout<TShape,TStride>  const& tma_gbasis,      // TMA mode -> GMEM mode mapping
                    Swizzle<B,M,S>          const& swizzle,         // Swizzle fn on smem_idx
-                   uint32_t                       num_multicast)   // The number of CTAs in multicasting
+                   uint32_t                       num_multicast,
+                   const std::vector<int>& debug_info = std::vector<int>())   // The number of CTAs in multicasting
 {
   //
   // TMA desc creation
@@ -1012,6 +1013,13 @@ make_tma_copy_desc(Tensor<GEngine,GLayout> const& gtensor,         // The origin
                 << "\nl2Promotion    " << tma_l2Promotion
                 << "\noobFill        " << tma_oobFill << std::endl;
       std::cerr << "Error: Failed to initialize the TMA descriptor " << result << std::endl;
+
+      std::cerr <<  "debug_info: ";
+      for (int i = 0; i < debug_info.size(); i++) {
+        std::cerr << debug_info[i] << " ";
+      }
+
+      std::cerr << std::endl;
       assert(false);
     }
 
@@ -1069,7 +1077,8 @@ make_tma_copy_atom(CopyOp,
                    Tensor<GEngine,GLayout> const& gtensor,       // Full GMEM Tensor
                    SLayout                 const& slayout,       // CTA Tile of SMEM, potentially swizzled
                    uint32_t                const& num_multicast, // The number of CTAs involved in multicasting
-                   Layout<VShape,VStride>  const& cta_v_map)     // V: CTA val idx -> gmem mode
+                   Layout<VShape,VStride>  const& cta_v_map,
+                   const std::vector<int>& debug_info = std::vector<int>())     // V: CTA val idx -> gmem mode
 {
   //
   // TMA truncated layout
@@ -1087,7 +1096,8 @@ make_tma_copy_atom(CopyOp,
   auto [tma_desc, aux_params] = detail::make_tma_copy_desc<TmaInternalType>(gtensor,
                                                                             tma_gbasis,
                                                                             smem_swizzle,
-                                                                            num_multicast);
+                                                                            num_multicast,
+                                                                            debug_info);
 
   //
   // Construct the Copy_Traits
@@ -1124,10 +1134,11 @@ make_tma_copy_tiled(CopyOp                  const& copy_op,
                     Tensor<GEngine,GLayout> const& gtensor,     // Full GMEM Tensor
                     SLayout                 const& slayout,     // CTA Tile of SMEM
                     Layout<TShape,TStride>  const& cta_t_map,   // T: CTA thr idx -> logical TMA tid
-                    Layout<VShape,VStride>  const& cta_v_map)   // V: CTA val idx -> gmem mode
+                    Layout<VShape,VStride>  const& cta_v_map,  // V: CTA val idx -> gmem mode
+                    const std::vector<int>& debug_info = std::vector<int>())     // T: CTA thr idx -> logical TMA tid
 {
   Copy_Atom atom = make_tma_copy_atom<TmaInternalType>(copy_op, gtensor, slayout,
-                                                       cosize(cta_t_map), cta_v_map);
+                                                       cosize(cta_t_map), cta_v_map, debug_info);
 
   //
   // Construct the TiledCopy
@@ -1312,14 +1323,15 @@ make_tma_atom(CopyOp                  const& copy_op,
               Tensor<GEngine,GLayout> const& gtensor,
               SLayout                 const& slayout,
               CTA_Tiler               const& cta_tiler,
-              Cluster_Size            const& cluster_size = {})
+              Cluster_Size            const& cluster_size = {},
+              const std::vector<int>& debug_info = std::vector<int>())
 {
   auto cta_v_tile = make_identity_layout(shape(gtensor)).compose(cta_tiler);
   // Prefer TmaInternalType if specified. Fallback to GEngine::value_type
   using TmaType = conditional_t<is_same<void, TmaInternalType>::value, typename GEngine::value_type, TmaInternalType>;
   return detail::make_tma_copy_atom<TmaType>(copy_op,
                                              gtensor, slayout,
-                                             size(cluster_size), cta_v_tile);
+                                             size(cluster_size), cta_v_tile, debug_info);
 }
 
 // The "VectorCopy Partitioner" for TMA
@@ -1413,7 +1425,8 @@ make_tma_copy_A_sm90(CopyOp                  const& copy_op,
                      Tensor<GEngine,GLayout> const& gtensor,
                      SLayout                 const& slayout,
                      CTA_Tiler               const& cta_tiler,
-                     Cluster_Size            const& cluster_size)
+                     Cluster_Size            const& cluster_size,
+                     const std::vector<int>& debug_info = std::vector<int>())
 {
   // Keep only MK modes from MNK
   auto cta_tiler_mk = remove<1>(cta_tiler);
@@ -1433,7 +1446,7 @@ make_tma_copy_A_sm90(CopyOp                  const& copy_op,
 
     // Prefer TmaInternalType if specified. Fallback to GEngine::value_type
     using TmaType = conditional_t<is_same<void, TmaInternalType>::value, typename GEngine::value_type, TmaInternalType>;
-    auto tma_copy = detail::make_tma_copy_tiled<TmaType>(copy_op, gtensor, slayout, cta_t_tile, cta_v_tile);
+    auto tma_copy = detail::make_tma_copy_tiled<TmaType>(copy_op, gtensor, slayout, cta_t_tile, cta_v_tile, debug_info);
     return tma_copy;
   }
 }
@@ -1450,7 +1463,8 @@ make_tma_copy_B_sm90(CopyOp                  const& copy_op,
                      Tensor<GEngine,GLayout> const& gtensor,
                      SLayout                 const& slayout,
                      CTA_Tiler               const& cta_tiler,
-                     Cluster_Size            const& cluster_size)
+                     Cluster_Size            const& cluster_size,
+                     const std::vector<int>& debug_info = std::vector<int>())
 {
   // Keep only NK modes from MNK
   auto cta_tiler_nk = remove<0>(cta_tiler);
@@ -1470,7 +1484,7 @@ make_tma_copy_B_sm90(CopyOp                  const& copy_op,
 
     // Prefer TmaInternalType if specified. Fallback to GEngine::value_type
     using TmaType = conditional_t<is_same<void, TmaInternalType>::value, typename GEngine::value_type, TmaInternalType>;
-    auto tma_copy = detail::make_tma_copy_tiled<TmaType>(copy_op, gtensor, slayout, cta_t_tile, cta_v_tile);
+    auto tma_copy = detail::make_tma_copy_tiled<TmaType>(copy_op, gtensor, slayout, cta_t_tile, cta_v_tile, debug_info);
     return tma_copy;
   }
 }
@@ -1485,7 +1499,8 @@ auto
 make_tma_copy_C_sm90(CopyOp                  const& copy_op,
                      Tensor<GEngine,GLayout> const& gtensor,
                      SLayout                 const& slayout,
-                     CTA_Tiler               const& cta_tiler)
+                     CTA_Tiler               const& cta_tiler,
+                     const std::vector<int>& debug_info = std::vector<int>())
 {
   // Keep only MN modes from MNK
   auto cta_tiler_mn = remove<2>(cta_tiler);
@@ -1505,7 +1520,7 @@ make_tma_copy_C_sm90(CopyOp                  const& copy_op,
 
     // Prefer TmaInternalType if specified. Fallback to GEngine::value_type
     using TmaType = conditional_t<is_same<void, TmaInternalType>::value, typename GEngine::value_type, TmaInternalType>;
-    auto tma_copy = detail::make_tma_copy_tiled<TmaType>(copy_op, gtensor, slayout, cta_t_map, cta_v_tile);
+    auto tma_copy = detail::make_tma_copy_tiled<TmaType>(copy_op, gtensor, slayout, cta_t_map, cta_v_tile, debug_info);
     return tma_copy;
   }
 }

@@ -44,6 +44,8 @@
 #include "cute/tensor_predicate.hpp"
 #include "cute/numeric/arithmetic_tuple.hpp"
 
+#include "stdio.h"
+
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
 namespace cutlass::gemm::collective {
@@ -212,18 +214,19 @@ struct CollectiveMma<
     Tensor tensor_a = make_tensor(ptr_A, make_layout(make_shape(M,K,L), args.dA));
     Tensor tensor_b = make_tensor(ptr_B, make_layout(make_shape(N,K,L), args.dB));
 
+    //printf("ss.hpp:tensor_a: %p, tensor_b: %p\n", tensor_a.data(), tensor_b.data());
     typename Params::TMA_A tma_load_a = make_tma_copy_A_sm90(
         GmemTiledCopyA{},
         tensor_a,
         SmemLayoutA{}(_,_,cute::Int<0>{}),
         TileShape{},
-        ClusterShape{});
+        ClusterShape{}, {1, int(M), int(K), int(L)});
     typename Params::TMA_B tma_load_b = make_tma_copy_B_sm90(
         GmemTiledCopyB{},
         tensor_b,
         SmemLayoutB{}(_,_,cute::Int<0>{}),
         TileShape{},
-        ClusterShape{});
+        ClusterShape{}, {2, int(N), int(K), int(L)});
     uint32_t transaction_bytes_mk = TmaTransactionBytesMK;
     uint32_t transaction_bytes_nk = TmaTransactionBytesNK;
     uint32_t transaction_bytes = transaction_bytes_mk + transaction_bytes_nk;

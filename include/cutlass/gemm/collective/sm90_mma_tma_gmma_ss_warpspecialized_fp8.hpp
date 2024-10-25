@@ -45,6 +45,8 @@
 #include "cute/tensor_predicate.hpp"
 #include "cute/numeric/arithmetic_tuple.hpp"
 
+#include "stdio.h"
+
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
 namespace cutlass::gemm::collective {
@@ -206,6 +208,7 @@ struct CollectiveMma<
 
     Tensor tensor_a = make_tensor(ptr_A, make_layout(make_shape(M,K,L), args.dA));
     Tensor tensor_b = make_tensor(ptr_B, make_layout(make_shape(N,K,L), args.dB));
+    printf("ss_fp8.hpp:tensor_a: %p, tensor_b: %p\n", tensor_a.data(), tensor_b.data());
     typename Params::TMA_A tma_load_a = make_tma_copy_A_sm90(
         GmemTiledCopyA{},
         tensor_a,
