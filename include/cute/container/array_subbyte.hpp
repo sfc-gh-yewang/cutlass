@@ -181,6 +181,20 @@ public:
   }
 };
 
+template <class T>
+CUTE_HOST_DEVICE
+void
+print(subbyte_reference<T> ref) {
+  cute::print(ref.get());
+}
+
+template <class T>
+CUTE_HOST_DEVICE
+void
+pretty_print(subbyte_reference<T> ref) {
+  cute::pretty_print(ref.get());
+}
+
 //
 // subbyte_iterator
 //   Random-access iterator over subbyte references
@@ -332,6 +346,11 @@ print(subbyte_iterator<T> const& x) {
   printf("subptr[%db](%p.%u)", int(sizeof_bits_v<T>), x.ptr_, x.idx_);
 }
 
+template <class T>
+CUTE_HOST_DEVICE void
+print(subbyte_reference<T> const& x) {
+  print(x.get());
+}
 //
 // array_subbyte
 //   Statically sized array for non-byte-aligned data types
